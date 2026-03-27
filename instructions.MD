@@ -42,10 +42,10 @@ Vos composants de stockage seront évalués par nos algorithmes selon deux score
 1. **L'Indice de Vélocité Brute :**
 
 $$
-Score_{vitesse} = (generation_{pcie} \times 1000) + \left(\frac{vitesse_{lecture} + vitesse_{ecriture}}{2}\right)
+Score_{vitesse} = \frac{vitesse_{lecture} + vitesse_{ecriture}}{2} + (generation_{pcie} \times 200)
 $$
 
-*Un SSD avec un cache DRAM (`cache_dram = 1`) recevra un multiplicateur bonus de 1.15 sur ce score, car il sera beaucoup plus stable lors des gros transferts.*
+*Un SSD avec un cache DRAM (`cache_dram = 1`) recevra un multiplicateur bonus de 1.15 sur ce score, car il sera beaucoup plus stable lors des gros transferts. La génération PCIe apporte un léger bonus contextuel, mais ce sont les vitesses réelles qui pilotent le classement.*
 
 2. **L'Indice de Rentabilité (Value for Money) :**
 
@@ -77,35 +77,47 @@ Comme pour le stockage, les données de performance doivent être **strictement 
 | `cache_l3_mo` | Entier | Quantité de mémoire Cache L3 en Mégaoctets (Mo). | `24` |
 | `tdp_w` | Entier | Thermal Design Power en Watts (Consommation thermique). | `125` |
 | `igpu_integre` | Entier (Booléen) | Possède-t-il une puce graphique intégrée ? `1` = Oui, `0` = Non (ex: Intel "F"). | `1` |
+| `nb_proc_graph` | Entier | Nombre total de coeurs graphiques intégrés. | `2` |
 | `annee_sortie` | Entier | Année de commercialisation. | `2022` |
 | `prix` | Entier | Prix actuel (sans espace). | `179000` |
 | `boutique` | Texte | Nom du revendeur ou de la boutique | `PCUpgrade` , `Les Casaniers` |
 | `source` | Texte | Lien hypertexte direct vers la page du produit ou contact. | `https://...` |
+
+**Note Importante sur les Cœurs :**
+
+Intel a popularisé l'architecture hybride avec ses P-Cores (haute performance) et ses E-Cores (efficience énergétique). AMD, de son côté, continue d'utiliser des cœurs complets sans distinction officielle. Les distinctions d'Intel ont commencé à partir de la 12ème génération (Alder Lake). Pour les anciennes générations d'Intel et pour tous les AMD, vous devez remplir la colonne `nb_p_cores` avec le nombre total de cœurs, et mettre *0* dans `nb_e_cores`.
+
+Liens utiles: 
+* https://www.intel.fr/content/www/fr/fr/gaming/resources/how-hybrid-design-works.html
+* https://www.amd.com/fr/products/processors/desktops/ryzen.html
 
 ### Comment nous allons évaluer vos choix (Le "Versus")
 
 Pour le simulateur, vos processeurs seront soumis à deux algorithmes de notation distincts pour définir leur profil (Gaming ou Productivité) :
 
 1. **L'Indice de Productivité (Multitâche & Rendu) :**
-Notre moteur va calculer la puissance de calcul brute en valorisant l'architecture hybride :
 
-$Score_{Pro} = (nb\_p\_cores \times 2) + nb\_e\_cores + \left( \frac{nb\_threads}{2} \right)$
+Notre moteur va calculer la puissance de calcul brute en valorisant l'architecture hybride et la fréquence :
 
-*Ce score permettra de recommander les meilleurs processeurs pour les stations de travail (Montage 3D, Code, etc.).*
+$Score_{Pro} = \left[(nb\_p\_cores \times 2) + nb\_e\_cores\right] \times freq\_boost\_ghz + \frac{cache\_l3\_mo}{2}$
+
+*La fréquence boost agit comme multiplicateur du nombre de cœurs : un CPU avec peu de cœurs mais une haute fréquence restera compétitif. Le cache L3 apporte un léger bonus supplémentaire. Ce score permettra de recommander les meilleurs processeurs pour les stations de travail (Montage 3D, Code, etc.).*
 
 2. **L'Indice Gaming (Jeux Vidéo) :**
-Pour le jeu, la fréquence et le cache priment sur le nombre total de cœurs :
 
-$Score_{Gaming} = (freq\_boost\_ghz \times 10) + cache\_l3\_mo$
+Pour le jeu, la fréquence et le cache priment sur le nombre total de cœurs, mais les P-Cores comptent également (les jeux modernes exploitent 6 à 8 cœurs) :
 
-*Un CPU avec un énorme Cache L3 (comme les versions "X3D" d'AMD) obtiendra un bonus massif sur ce score, reflétant la réalité du marché.*
+$Score_{Gaming} = (freq\_boost\_ghz \times 10) + (cache\_l3\_mo \times 0.5) + (nb\_p\_cores \times 3)$
+
+*Un CPU avec un énorme Cache L3 (comme les versions "X3D" d'AMD) obtiendra un bonus significatif, tandis que la fréquence boost reste le facteur dominant du score.*
 
 3. **L'Indice Thermique (Pour le Build Simulator) :**
+
 Dans le mode "Construction", le `tdp_w` sera soustrait de la capacité de l'alimentation (PSU). Si l'étudiant choisit un CPU avec un TDP de 253W, le budget énergétique restant pour la carte graphique sera drastiquement réduit !
 
 ## Composant : Mémoire Vive (RAM)
 
-### **Rôle dans le Build :**
+### Rôle dans le Build :
 
 Espace de travail à court terme du processeur. Plus elle est rapide et réactive, plus le processeur peut être alimenté en données efficacement (évitant ainsi les goulots d'étranglement, surtout en jeu).
 
@@ -133,19 +145,19 @@ Vos données doivent être **strictement numériques** dans les colonnes de perf
 
 Dans notre application, comparer deux kits de RAM ne se limite pas à regarder la fréquence. Notre algorithme calcule la **latence absolue** (le temps de réponse réel) pour départager les composants.
 
-**L'Indice de Vélocité (Performance Score) :**
+1. **L'Indice de Vélocité (Performance Score) :**
 
-Notre système calcule un ratio entre la fréquence et la latence. Plus le score est haut, plus la mémoire est réactive.
+Notre système calcule un ratio entre la fréquence et la latence, pondéré par la génération DDR. Plus le score est haut, plus la mémoire est réactive.
 
-$Score_{RAM} = \frac{frequence\_mhz}{cas\_latency} \times 10$
+$Score_{RAM} = \frac{frequence\_mhz}{cas\_latency} \times generation$
 
-*Exemple : Une RAM à 6000 MHz en CL30 aura un meilleur score (2000) qu'une RAM à 6400 MHz en  CL40 (1600).*
+*Exemple : Une DDR5 à 6000 MHz en CL30 aura un score de 1000, tandis qu'une DDR4 à 3600 MHz en CL16 obtiendra 900. La DDR5 est naturellement avantagée grâce à sa supériorité en bande passante.*
 
-**L'Indice Dual-Channel (Validation Build) :**
+2. **2. L'Indice Dual-Channel (Validation Build) :**
 
 Lors d'une simulation de montage, si vous choisissez un composant avec `nb_barrettes = 1` (Single Channel), notre validateur appliquera un malus de performance sur le système final. Le standard est de **2** barrettes pour activer le Dual-Channel.
 
-**Le Check de Compatibilité Intel/AMD :**
+3. **Le Check de Compatibilité Intel/AMD :**
 
 **G**râce à la colonne `profil_oc`, le simulateur vérifiera la cohérence. Associer de la RAM optimisée `EXPO` avec un processeur Intel fonctionnera, mais déclenchera un avertissement "Optimisation non garantie" dans l'outil.
 
@@ -168,6 +180,7 @@ C'est le moteur de rendu visuel. Elle gère la 3D, le ray-tracing et les calculs
 | `freq_boost_mhz` | Entier | Fréquence maximale (Boost Clock) en MHz. | `2610` |
 | `longueur_mm` | Entier | Longueur totale de la carte en millimètres (Crucial pour le boîtier). | `308` |
 | `epaisseur_slots` | Décimal | Nombre d'emplacements PCIe condamnés par l'épaisseur (2, 2.5, 3...). | `2.5` |
+| `generation_pcie` | Entier | Génération PCIe du GPU : `3` (Gen3), `4` (Gen4), `5` (Gen5). | `4` |
 | `connecteur_alim` | Texte | Type de câble requis : `8-pin` (classique) ou `12VHPWR` (nouvelle norme). | `12VHPWR` |
 | `port_hdmi` | Entier | Nombre de sorties HDMI. | `1` |
 | `port_dp` | Entier | Nombre de sorties DisplayPort. | `3` |
@@ -184,17 +197,24 @@ C'est le moteur de rendu visuel. Elle gère la 3D, le ray-tracing et les calculs
 La solution va analyser les GPU sous trois angles précis. Un GPU avec beaucoup de VRAM mais un bus mémoire bridé sera pénalisé par l'algorithme.
 
 1. **Le Score de Puissance Brute (Rasterization) :**
-Notre algorithme croise la VRAM, la largeur du bus et la fréquence pour établir un score de performance en jeu :
 
-$Score_{GPU} = \left(vram\_go \times \frac{bus\_memoire\_bits}{128}\right) + \left(\frac{freq\_boost\_mhz}{10}\right)$
+Notre algorithme croise la VRAM, la largeur du bus et la fréquence dans une approche multiplicative pour établir un score de performance en jeu :
 
-*Exemple : Une carte 12 Go avec un bus de 192-bits sera jugée plus performante pour la haute résolution qu'une carte 16 Go avec un bus de 128-bits.*
+$Score_{GPU} = vram\_go \times \frac{bus\_memoire\_bits}{128} \times \frac{freq\_boost\_mhz}{1000}$
+
+*Exemple : Une RTX 4070 Ti Super (16 Go, 256-bit, 2610 MHz) obtiendra un score de 83.5, tandis qu'une RTX 4060 (8 Go, 128-bit, 2460 MHz) n'obtiendra que 19.7. Les tiers de performance sont ainsi clairement séparés : Entry (~20) → Mid (~50) → High (~80) → Ultra (~180).*
 
 2. **Le Crash-Test de Compatibilité (Le Piège du Build) :**
+
 Dans le simulateur, si un client choisit un petit boîtier, votre carte graphique sera rejetée si sa `longueur_mm` dépasse la limite du châssis. De même, si son `epaisseur_slots` est de 3, le configurateur bloquera l'ajout d'une carte Wi-Fi supplémentaire.
 
 3. **Le Check "Alimentation Nouvelle Génération" :**
+
 Grâce à la colonne `connecteur_alim`, si la carte exige du `12VHPWR` (comme beaucoup de NVIDIA récentes), le simulateur imposera automatiquement au client de choisir une alimentation certifiée **ATX 3.0** (que vous devrez sourcer dans le fichier PSU !).
+
+4. **Le Check de Compatibilité PCIe (GPU ↔ Carte Mère) :**
+
+Si `GPU.generation_pcie > MOBO.generation_pcie`, le simulateur affichera un avertissement **"Bridage bande passante : le GPU ne sera pas exploité à son plein potentiel sur cette carte mère"**. Le GPU fonctionnera (rétrocompatibilité PCIe), mais les performances seront limitées par le débit du slot inférieur.
 
 ## Composant : Boîtier d'Alimentation (PSU)
 
@@ -224,18 +244,21 @@ C'est le cœur du système. L'alimentation convertit le courant mural (alternati
 L'alimentation n'est pas évaluée sur ses FPS en jeu, mais sur sa **fiabilité** et sa **capacité à sécuriser le montage**.
 
 1. **L'Indice de Qualité (Premium Score) :**
-Notre algorithme valorise les alimentations qui chauffent peu (bonne certification) et qui facilitent le montage (modularité).
 
-$Score_{PSU} = (score\_certification \times 10) + (score\_modularite \times 5)$
+Notre algorithme valorise les alimentations qui chauffent peu (bonne certification), qui facilitent le montage (modularité), et qui offrent une marge d'évolution (puissance) .
 
-*Exemple : Une alimentation Gold (4) Full-modulaire (2) aura un score de 50. Une Bronze (2) Non-modulaire (0) aura 20.*
+$Score_{PSU} = (score\_certification \times 10) + (score\_modularite \times 5) + \frac{puissance\_w}{100}$
+
+*Exemple : Une alimentation 850W Gold (4) Full-modulaire (2) aura un score de 58.5. Une 650W Bronze (2) Non-modulaire (0) aura 26.5.*
 
 2. **La Règle d'Or de la Capacité (Crash-Test Build) :**
+
 Lors du simulateur de build, notre moteur calculera la consommation maximale théorique du système. Si la puissance de votre PSU ne respecte pas cette marge de sécurité de 30%, le build sera refusé :
 
 $Puissance\_W > (TDP\_CPU + TDP\_GPU + 100) \times 1.3$
 
 3. **La Tolérance Zéro sur les Câbles (Le Piège de Compatibilité) :**
+
 Si un client choisit dans notre catalogue une carte graphique récente (comme une RTX 4080) exigeant un connecteur `12VHPWR`, et que vous lui proposez une alimentation avec `connecteur_12vhpwr = 0`, le système générera une **Alerte Rouge : Risque de fonte de l'adaptateur**.
 
 ## Composant : Carte Mère (Motherboard)
@@ -258,6 +281,8 @@ C'est le système nerveux central de l'ordinateur. Elle interconnecte le process
 | `nb_slots_ram` | Entier | Nombre d'emplacements pour les barrettes de RAM. | `4` |
 | `max_ram_go` | Entier | Capacité maximale de mémoire vive tolérée par la carte. | `128` |
 | `nb_ports_m2` | Entier | Nombre d'emplacements pour les SSD NVMe. | `3` |
+| `nb_ports_sata` | Entier | Nombre de connecteurs SATA sur la carte mère (pour les HDD 3.5" et SSD 2.5" SATA). | `6` |
+| `generation_pcie` | Entier | Génération PCIe du slot x16 principal et des ports M.2 : `3` (Gen3), `4` (Gen4), `5` (Gen5). | `5` |
 | `version_wifi` | Entier | Norme Wi-Fi intégrée : `0` (Pas de Wi-Fi), `5` (Wi-Fi 5), `6` (Wi-Fi 6/6E), `7` (Wi-Fi 7). | `6` |
 | `annee_sortie` | Entier | Année de commercialisation. | `2022` |
 | `prix` | Entier | Prix actuel (sans espace). | `259000` |
@@ -269,17 +294,25 @@ C'est le système nerveux central de l'ordinateur. Elle interconnecte le process
 La carte mère n'apporte pas de FPS (images par seconde) directement, mais elle est évaluée sur son potentiel d'évolution (Future-Proofing) et sa connectivité.
 
 1. **L'Indice d'Évolutivité (Future-Proof Score) :**
-Notre algorithme calcule la capacité de la carte mère à accueillir des améliorations dans les années à venir (plus de stockage, réseau plus rapide) :
 
-$Score_{Evo} = (type\_ram\_supporte \times 10) + (nb\_ports\_m2 \times 5) + (version\_wifi \times 2)$
+Notre algorithme calcule la capacité de la carte mère à accueillir des améliorations dans les années à venir (plus de stockage, réseau plus rapide, compatibilité GPU) :
 
-*Exemple : Une carte mère DDR5 avec 3 ports M.2 et Wi-Fi 6 obtiendra un bien meilleur score $(50 + 15 + 12 = 77)$  qu'une ancienne carte DDR4 sans Wi-Fi.*
+$Score_{Evo} = (type\_ram\_supporte \times 10) + (nb\_ports\_m2 \times 5) + (nb\_ports\_sata \times 2) + (version\_wifi \times 3) + (generation\_pcie \times 5)$
+
+*Exemple : Une carte mère DDR5 avec 3 ports M.2, 6 ports SATA, Wi-Fi 7 et PCIe 5 obtiendra un score de $(50 + 15 + 12 + 21 + 25 = 123)$, contre $(40 + 5 + 8 + 0 + 15 = 68)$ pour une ancienne carte DDR4 avec 1 port M.2, 4 ports SATA, sans Wi-Fi et en PCIe 3.*
 
 2. **Le Check de Compatibilité Ultime (Le Gardien du Build) :**
-C'est ici que l'algorithme est le plus sévère. Pour qu'un PC démarre dans le simulateur, la carte mère doit valider un triple contrôle :
-    ◦ **Test Processeur :** `MOBO.socket` DOIT ÊTRE ÉGAL à `CPU.socket`.
-    ◦ **Test Mémoire :** `MOBO.type_ram_supporte` DOIT ÊTRE ÉGAL à `RAM.generation`.
-    ◦ **Test Quantité RAM :** `RAM.nb_barrettes` DOIT ÊTRE $\ge$ `MOBO.nb_slots_ram`.
 
+C'est ici que l'algorithme est le plus sévère. Pour qu'un PC démarre dans le simulateur, la carte mère doit valider les contrôles suivants :
+* **Test Processeur :** `MOBO.socket` DOIT ÊTRE ÉGAL à `CPU.socket`.
+* **Test Mémoire :** `MOBO.type_ram_supporte` DOIT ÊTRE ÉGAL à `RAM.generation`.
+* **Test Quantité RAM :** `RAM.nb_barrettes` DOIT ÊTRE $\le$ `MOBO.nb_slots_ram`.
+* **Test Stockage NVMe :** Le nombre de SSD au format `M.2` sélectionnés DOIT ÊTRE $\le$ `MOBO.nb_ports_m2`.
+* **Test Stockage SATA :** Le nombre de disques SATA (format `2.5` ou `3.5` avec `generation_pcie = 0`) DOIT ÊTRE $\le$ `MOBO.nb_ports_sata`.
+* **Test Gen PCIe Stockage :** Si `STO.generation_pcie > MOBO.generation_pcie`, le simulateur affichera un avertissement **"SSD bridé : le SSD NVMe ne sera pas exploité à son plein potentiel sur cette carte mère"**.
+* **Test GPU-CM PCIe :** Si `GPU.generation_pcie > MOBO.generation_pcie`, avertissement **"GPU bridé : bande passante limitée par le slot PCIe de la carte mère"**.
+
+ 
 3. **Le Piège du Boîtier :**
+
 Si vous sélectionnez une carte mère au format `ATX` et que le client a choisi un boîtier ultra-compact prévu pour du `Mini-ITX`, le montage sera physiquement impossible et bloqué.
